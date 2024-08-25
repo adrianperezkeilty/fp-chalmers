@@ -1,8 +1,20 @@
+-- open import Data.List hiding (last; tail; _++_; head)
+--                     renaming ([_] to ηList; map to fmapList; concat to μList)
+                    
+-- open import Data.Vec hiding (head; toList)
+-- open import Agda.Builtin.Nat
+
+open import Agda.Builtin.Equality
+
 open import Data.List hiding (last; tail; _++_; head)
                     renaming ([_] to ηList; map to fmapList; concat to μList)
                     
 open import Data.Vec hiding (head; toList)
-open import Agda.Builtin.Nat
+open import Agda.Builtin.Nat hiding (_<_)
+
+infix 0 case_of_
+case_of_ : ∀ {a b} {A : Set a} {B : Set b} → A → (A → B) → B
+case x of f = f x
 
 id : {A : Set} → A → A
 id a = a
@@ -42,7 +54,6 @@ possible1 s = map (λ n → detFlow next1 n s) (0 ∷ 1 ∷ 2 ∷ 3 ∷ 4 ∷ []
 -------------------
 -- ex 4.5
 -------------------
-open import Agda.Builtin.Equality
 
 -- transitivity of equality
 trans : {A : Set} {x y z : A} → (x ≡ y) → (y ≡ z) → x ≡ z
@@ -328,6 +339,29 @@ postulate _⊕_ : Val → Val → Val
 _⊕l_ : {t : Nat} → (X t → Val) → (X t → Val) → (X t → Val)
 f ⊕l g = (λ x → f x ⊕ g x)
 
+-- transitivity for inequality  
+postulate _≤_       : {A : Set} → A → A → Set
+postulate refl≤     : {A : Set} → ∀ {a : A} → a ≤ a
+postulate trans≤    : {A : Set} → ∀ {a b c : A} → a ≤ b → b ≤ c → a ≤ c
+-- postulate total≤    : {A : Set} → (x y : A) → Either (x ≤ y ) (y ≤ x )
+
+begin≤_ : {A : Set} → {x y : A} → x ≤ y → x ≤ y
+begin≤ p = p
+
+_end≤ : {A : Set} → (x : A) → x ≤ x
+x end≤ = refl≤
+
+_≤⟨_⟩_ : {A : Set} → (x : A) → {y z : A} → x ≤ y → y ≤ z → x ≤ z
+x ≤⟨ p ⟩ q = trans≤ p q
+
+_≤⟨⟩_ : {A : Set} → (x : A) → {y : A} → x ≤ y → x ≤ y
+x ≤⟨⟩ q = x ≤⟨ refl≤ ⟩ q
+
+infix   1 begin≤_
+infix   3 _end≤
+infixr  2 _≤⟨_⟩_
+infixr  2 _≤⟨⟩_
+
 -- Rewards
 postulate reward : (t : Nat) → (x : X t) → Y t x → X (suc t) → Val
 
@@ -366,16 +400,11 @@ sumR {t } ((x , y ) || xys) = reward t x y (head xys) ⊕ sumR xys
 postulate measure : M Val → Val
 
 -- measure of the ⊕-sum of the rewards along all possible trajectories (measured total reward)
-val : {t n : Nat} → (ps : PolicySeq t n) → ((x : X t) → Val)
+val : {t n : Nat} → (ps : PolicySeq t n) → (x : X t) → Val
 val ps = measure ∘ (fmapM sumR ∘ trj ps)
 
-postulate _≤_       : Val → Val → Set
-postulate refl≤     : (x : Val) → x ≤ x
-postulate trans≤    : (x y z : Val) → x ≤ y → y ≤ z → x ≤ z
-postulate total≤    : (x y : Val) → Either (x ≤ y ) (y ≤ x )
-
--- preorder between functions (x : X t) → Val
-_≤l_ : {t : Nat} → (X t → Val) → (X t → Val) → Set
+-- preorder between functions A → Val
+_≤l_ : {A : Set} → (A → Val) → (A → Val) → Set
 f ≤l g = ∀ x → (f x ≤ g x)
 
 OptPolicySeq : {t n : Nat} → PolicySeq t n → Set
@@ -533,19 +562,15 @@ BellmanEq t n p1 (p0 :: ps) x =
 -- 7.9 Bellman's principle, optimal extensions
 ---------------------------------------------------------------------
 -- value of a policy sequence through Bellman's equation
-valopt : {t n : Nat} → PolicySeq t n → X t → Val
-valopt {t} Nil x = 0Val
-valopt {t} (p :: ps) x =    let y = p x in
+valBell : {t n : Nat} → PolicySeq t n → X t → Val
+valBell {t} Nil x = 0Val
+valBell {t} (p :: ps) x =    let y = p x in
                             let mx' = next t x y in
-                            measure (fmapM (reward t x y ⊕l valopt ps) mx')
+                            measure (fmapM (reward t x y ⊕l valBell ps) mx')
 
 -- p is an optimal extension of ps iff p is at least as good as any other policy
 OptExt : {t n : Nat} → PolicySeq (suc t) n → Policy t → Set
-OptExt ps p = ∀ p' → val (p' :: ps) ≤l val (p :: ps)
-
--- Optimal extensions of optimal policy sequences are optimal
-postulate Bellman : {t n : Nat} → (p : Policy t) → (ps : PolicySeq (suc t) n) →
-                    OptExt ps p → OptPolicySeq ps → OptPolicySeq (p :: ps)
+OptExt ps p = ∀ p' → valBell (p' :: ps) ≤l valBell (p :: ps)
 
 postulate Finite    : Set → Set
 postulate toList    : {A : Set } → Finite A         → List A
@@ -555,13 +580,77 @@ postulate argmax    : {A : Set } → (f : A → Val)    → List A → A
 -- Computing an optimal extension p : Policy t of a policy sequence ps requires 
 -- computing a control p x : Y t x that maximizes val (p :: ps) x for every x : X t. 
 
--- optExt : {t n : Nat} → PolicySeq (suc t) n → Policy t
--- optExt {t} ps x = argmax (λ p → valopt (p :: ps) x) (toList (Finite (Y t x)))
+postulate finiteY : {t : Nat} (x : X t) → Finite (Y t x)
+postulate finiteP : {t : Nat} (x : X t) → Finite (Policy t)
 
--- Error:
--- Set !=< Finite ((x₁ : X t) → Y t x₁)
--- when checking that the expression Finite (Y t x) has type
--- Finite ((x₁ : X t) → Y t x₁)
+-- case A = Policy t
+-- optExt : {t n : Nat} → PolicySeq (suc t) n → Policy t
+-- optExt ps = 
+--     λ x → (argmax (λ p → val (p :: ps) x) (toList (finiteP x))) x
+
+-- case A = Y t x
+optExt : {t n : Nat} → PolicySeq (suc t) n → Policy t
+optExt {t} ps x = 
+    argmax (λ y → measure (fmapM (reward t x y ⊕l valBell ps) (next t x y))) (toList (finiteY x))
+
+---------------------------------------------------------------------
+-- 7.10 
+---------------------------------------------------------------------
+-- Formulate minimal requirements on toList, max and argmax for optExt to satisfy optExtSpec
+-- optExtSpec says that for all ps, optExt ps is an optimal extension of ps.
+
+postulate maxSpec : {t : Nat} → {x : X t} → (y : Y t x) → (f : Y t x → Val) → List (Y t x) 
+                    → f y ≤ max f (toList (finiteY x))
+
+postulate argmaxSpec : {t : Nat} → {x : X t} → (f : Y t x → Val) → List (Y t x) 
+                    → f (argmax f (toList (finiteY x))) ≡ max f (toList (finiteY x))
+
+postulate optExtSpec : {t n : Nat} → (ps : PolicySeq (suc t) n) → OptExt ps (optExt ps)
+
+-- optExtSpec : {t n : Nat} → (ps : PolicySeq (suc t) n) → OptExt ps (optExt ps)
+-- optExtSpec {t} {n} ps p' x =
+--     begin≤ 
+--         valBell (p' :: ps) x 
+--     =⟨⟩
+--         measure (fmapM (reward t x (p' x) ⊕l valBell ps) (next t x (p' x)))
+--     ≤⟨ maxSpec (p' x) (λ y → measure (fmapM (reward t x y ⊕l valBell ps) (next t x y))) (toList (finiteY x)) ⟩
+--         max (λ y → measure (fmapM (reward t x y ⊕l valBell ps) (next t x y))) (toList (finiteY x))
+--     ⟨ argmaxSpec (λ y → measure (fmapM (reward t x y ⊕l valBell ps) (next t x y))) (toList (finiteY x)) ⟩
+--         measure (fmapM (reward t x (optExt {t} ps x) ⊕l valBell ps) (next t x (optExt {t} ps x)))
+--     ≤⟨⟩
+--         valBell (optExt ps :: ps) x
+--     end≤
+
+---------------------------------------------------------------------
+-- 7.11
+---------------------------------------------------------------------
+
+OptPolicySeqBell : {t n : Nat} → PolicySeq t n → Set
+OptPolicySeqBell {t } {n} ps = ∀ (ps' : PolicySeq t n) → valBell ps' ≤l valBell ps
+
+-- To prove Bellman's optimality principle one needs two monotonicity conditions
+postulate measureMon : {A : Set } → (f g : A → Val) → (f ≤l g) → (ma : M A) → measure (fmapM f ma) ≤ measure (fmapM g ma)
+postulate plusMon : {a b c d : Val } → a ≤ b → c ≤ d → (a ⊕ c) ≤ (b ⊕ d)
+
+-- Optimal extensions of optimal policy sequences are optimal
+postulate Bellman : {t n : Nat} → (p : Policy t) → (ps : PolicySeq (suc t) n) →
+                    OptExt ps p → OptPolicySeqBell ps → OptPolicySeqBell (p :: ps)
+-- Bellman p ps optExt optPs q s = {!   !}
+-- Bellman p ps optExt optPs q s = plusMon (optExt q s) (optPs q s)
+
+---------------------------------------------------------------------
+-- 7.12 Verified backward induction
+---------------------------------------------------------------------
+
+-- With optExt one can solve SDPs by backward induction
+bi : (t n : Nat) → PolicySeq t n
+bi t zero = Nil
+bi t (suc n) = let ps = bi (suc t) n in optExt ps :: ps
+
+-- With Bellman and optExtSpec one can verify that bi yields optimal policy sequences
+-- biOptVal : (t n : Nat) → OptPolicySeq (bi t n)
+-- biOptVal t zero = {!   !}
+-- biOptVal t (suc n) = {!   !}
 
 ---------------------------------------------------------------------
 -- Generation dilemma
@@ -606,4 +695,4 @@ postulate YGen : (t : Nat) → XGen t → Set
 -- nextGen
 postulate nextGen : (t : Nat) → (x : XGen t) → YGen t x → M (XGen (suc t))
 
-postulate rewardGen : (t : Nat) → (x : XGen t) → YGen t x → XGen (suc t) → Val    
+postulate rewardGen : (t : Nat) → (x : XGen t) → YGen t x → XGen (suc t) → Val     
