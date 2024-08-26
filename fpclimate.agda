@@ -230,7 +230,7 @@ Det≡NonDet f (suc n) x =
 -- ex 4.14  Monadic laws
 -------------------------
 postulate M     : Set → Set
-postulate fmapM : {A B : Set}  → (A → B)   → M A → M B
+postulate fmapM : {A B : Set}  → (A → B)   → (M A → M B)
 postulate ηM    : {A : Set}    → A         → M A
 postulate μM    : {A : Set}    → M (M A)   → M A
 
@@ -336,7 +336,7 @@ infix 4 _,_
 postulate Val       : Set
 postulate 0Val : Val
 postulate _⊕_ : Val → Val → Val
-_⊕l_ : {t : Nat} → (X t → Val) → (X t → Val) → (X t → Val)
+_⊕l_ : {A : Set} → (A → Val) → (A → Val) → (A → Val)
 f ⊕l g = (λ x → f x ⊕ g x)
 
 -- transitivity for inequality  
@@ -404,7 +404,7 @@ val : {t n : Nat} → (ps : PolicySeq t n) → (x : X t) → Val
 val ps = measure ∘ (fmapM sumR ∘ trj ps)
 
 -- preorder between functions A → Val
-_≤l_ : {A : Set} → (A → Val) → (A → Val) → Set
+_≤l_ : {A B : Set} → (A → B) → (A → B) → Set
 f ≤l g = ∀ x → (f x ≤ g x)
 
 OptPolicySeq : {t n : Nat} → PolicySeq t n → Set
@@ -635,8 +635,6 @@ postulate plusMon : {a b c d : Val } → a ≤ b → c ≤ d → (a ⊕ c) ≤ (
 -- Optimal extensions of optimal policy sequences are optimal
 postulate Bellman : {t n : Nat} → (p : Policy t) → (ps : PolicySeq (suc t) n) →
                     OptExt ps p → OptPolicySeqBell ps → OptPolicySeqBell (p :: ps)
--- Bellman p ps optExt optPs q s = {!   !}
--- Bellman p ps optExt optPs q s = plusMon (optExt q s) (optPs q s)
 
 ---------------------------------------------------------------------
 -- 7.12 Verified backward induction
@@ -647,10 +645,16 @@ bi : (t n : Nat) → PolicySeq t n
 bi t zero = Nil
 bi t (suc n) = let ps = bi (suc t) n in optExt ps :: ps
 
+postulate refl≤l : {A B : Set} → (f : A → B) → f ≤l f 
+
+-- By reflexivity of ≤
+postulate nilIsOptPolicySeq : {t : Nat} → OptPolicySeqBell {t} Nil 
+-- nilIsOptPolicySeq {t} = {!   !}
+
 -- With Bellman and optExtSpec one can verify that bi yields optimal policy sequences
--- biOptVal : (t n : Nat) → OptPolicySeq (bi t n)
--- biOptVal t zero = {!   !}
--- biOptVal t (suc n) = {!   !}
+biOptVal : (t n : Nat)  → OptPolicySeqBell (bi t n)
+biOptVal t zero         = nilIsOptPolicySeq
+biOptVal t (suc n)      = Bellman (optExt (bi (suc t) n)) (bi (suc t) n) (optExtSpec (bi (suc t) n)) (biOptVal (suc t) n)
 
 ---------------------------------------------------------------------
 -- Generation dilemma
