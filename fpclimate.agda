@@ -1,9 +1,3 @@
--- open import Data.List hiding (last; tail; _++_; head)
---                     renaming ([_] to ηList; map to fmapList; concat to μList)
-                    
--- open import Data.Vec hiding (head; toList)
--- open import Agda.Builtin.Nat
-
 open import Agda.Builtin.Equality
 
 open import Data.List hiding (last; tail; _++_; head)
@@ -593,6 +587,9 @@ optExt : {t n : Nat} → PolicySeq (suc t) n → Policy t
 optExt {t} ps x = 
     argmax (λ y → measure (fmapM (reward t x y ⊕l valBell ps) (next t x y))) (toList (finiteY x))
 
+-- postulate fmapM : {A B : Set}  → (A → B)  → M A → M B
+-- postulate next : (t : Nat) → (x : X t) → Y t x → M (X (suc t))
+
 ---------------------------------------------------------------------
 -- 7.10 
 ---------------------------------------------------------------------
@@ -626,7 +623,7 @@ postulate optExtSpec : {t n : Nat} → (ps : PolicySeq (suc t) n) → OptExt ps 
 ---------------------------------------------------------------------
 
 OptPolicySeqBell : {t n : Nat} → PolicySeq t n → Set
-OptPolicySeqBell {t } {n} ps = ∀ (ps' : PolicySeq t n) → valBell ps' ≤l valBell ps
+OptPolicySeqBell {t } {n} ps = ∀ (ps' : PolicySeq t n) → (x : X t) → valBell ps' x ≤ valBell ps x
 
 -- To prove Bellman's optimality principle one needs two monotonicity conditions
 postulate measureMon : {A : Set } → (f g : A → Val) → (f ≤l g) → (ma : M A) → measure (fmapM f ma) ≤ measure (fmapM g ma)
@@ -635,7 +632,7 @@ postulate plusMon : {a b c d : Val } → a ≤ b → c ≤ d → (a ⊕ c) ≤ (
 -- Optimal extensions of optimal policy sequences are optimal
 postulate Bellman : {t n : Nat} → (p : Policy t) → (ps : PolicySeq (suc t) n) →
                     OptExt ps p → OptPolicySeqBell ps → OptPolicySeqBell (p :: ps)
-
+-- Bellman {t} {n} p ps optext optpol x = trans≤ ? ?
 ---------------------------------------------------------------------
 -- 7.12 Verified backward induction
 ---------------------------------------------------------------------
@@ -649,7 +646,7 @@ postulate refl≤l : {A B : Set} → (f : A → B) → f ≤l f
 
 -- By reflexivity of ≤
 postulate nilIsOptPolicySeq : {t : Nat} → OptPolicySeqBell {t} Nil 
--- nilIsOptPolicySeq {t} = {!   !}
+-- nilIsOptPolicySeq {t} x = refl≤
 
 -- With Bellman and optExtSpec one can verify that bi yields optimal policy sequences
 biOptVal : (t n : Nat)  → OptPolicySeqBell (bi t n)
